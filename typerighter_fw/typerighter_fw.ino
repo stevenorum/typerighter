@@ -22,11 +22,15 @@ Adafruit_SharpMem display(SHARP_SCK, SHARP_MOSI, SHARP_SS, 144, 168);
 #define WHITE 1
 
 // TEXT
-#define TEXT_BUFFER_SIZE 8192
+#define TEXTSIZE 3
+int ROW_C = 21 / TEXTSIZE;
+int COL_C = 24 / TEXTSIZE;
+#define TEXT_BUFFER_SIZE 4096
 char textBuffer[TEXT_BUFFER_SIZE];
 int textCursor = 0;
 
 // EEPROM
+#include <EEPROM.h>
 // https://learn.sparkfun.com/tutorials/reading-and-writing-serial-eeproms#arduino-hardware-hookup-
 //#define EEPROM_ADR 0x54
 //#define MAX_I2C_WRITE 16
@@ -44,7 +48,7 @@ void setup()
   display.begin();
   display.clearDisplay();
   display.setCursor(0,0);
-  display.setTextSize(1);
+  display.setTextSize(TEXTSIZE);
   display.setRotation(0);
   // Rotations:
   // 0: pins are bottom edge of screen
@@ -96,6 +100,14 @@ void loop()
   }
 }
 
+void displayMessage(char msg[])
+{
+  display.clearDisplay();
+  display.setCursor(0,0);
+  display.print(msg);
+  display.refresh();
+}
+
 void printToScreen(char msg[])
 {
   display.print(msg);
@@ -107,12 +119,49 @@ void printToScreen(char msg)
   display.refresh();  
 }
 
+void printToComputer() {
+  displayMessage("Printing to computer...");
+    for (int i = 0; i < textCursor; i++) {
+      Keyboard.print(textBuffer[i]);
+      delay(100);
+  }
+  }
+
+void saveToDisk() {
+  displayMessage("Saving buffer to EEPROM...");
+  for (int i = 0; i < textCursor; i++) {
+    EEPROM.write(i, (byte) textBuffer[i]);
+  }
+  EEPROM.write(textCursor, (byte) 0);
+  delay(1000);
+}
+
+void loadFromDisk() {
+  displayMessage("Loading buffer from EEPROM...");
+  for (int i = 0; i < TEXT_BUFFER_SIZE; i++) {
+    textBuffer[i] = (char) EEPROM.read(i);
+    if (textBuffer[i]==0) {
+      textCursor = i;
+      break;
+    }
+  }
+  delay(1000);
+}
+
 void writeBufferToScreen() {
   display.clearDisplay();
   display.setCursor(0,0);
-  for (int i = 0; i < textCursor; i++) {
+  // TODO: Fix this so it properly handles newlines.
+  // \t tabs can go die in a fire, though.
+  int start_index = 0;
+  int row_count = textCursor/COL_C + 1;
+  if (row_count > ROW_C) {
+    start_index = (row_count - ROW_C) * COL_C;
+  }
+  for (int i = start_index; i < textCursor; i++) {
     display.print(textBuffer[i]);  
   }
+  display.print("_");
   display.refresh();
   //display.print(msg);
 }
@@ -140,6 +189,9 @@ void appendCharacter(char c) {
 void keyPressed(int key) {
   switch (key) {
     case 127: backspace(); break;
+    case 19: saveToDisk(); break;
+    case 12: loadFromDisk(); break;
+    case 16: printToComputer(); break;
     default: appendCharacter((char) key); break;
   }
   writeBufferToScreen();
